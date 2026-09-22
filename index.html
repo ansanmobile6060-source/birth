@@ -849,7 +849,7 @@ try{ seen = new Set(JSON.parse(localStorage.getItem("bday-seen") || "[]")); }cat
 const markSeen = id => { seen.add(id); try{ localStorage.setItem("bday-seen", JSON.stringify([...seen])); }catch(e){} };
 
 /* ---------- state ---------- */
-let letters = [], albums = { food:[], dog0:[], dog1:[], keep:[], mirror:[], ticket:[], travel:[] };
+let letters = [], albums = { food:[], dog0:[], dog1:[], keep:[], mirror:[], ticket:[], travel:[], sp_valley:[], sp_sea:[], sp_fire:[], sp_sky:[], sp_forest:[], sp_snow:[] };
 async function loadAll(){
   idb = await idbOpen();
   const local = await storeAll();
@@ -857,7 +857,7 @@ async function loadAll(){
   letters = [...GIFT.letters.map(l => ({...l, box: l.box || "received", from: l.from || ((l.box||"received") === "received" ? GIFT.from : ""), local:false})),
              ...local.filter(x => x.kind === "letter").map(x => ({...x, box: x.box || "sent", images: (x.imageBlobs||[]).map(b => URL.createObjectURL(b)), local:true}))]
             .sort((a,b) => (a.date||"").localeCompare(b.date||"") || (a.t||0)-(b.t||0));
-  const baked = { ticket: GIFT.ticket || [], travel: GIFT.travel || [], keep: GIFT.keep || [], mirror: GIFT.mirror || [], food: GIFT.food, dog0: (GIFT.dogs[0]||{}).media || [], dog1: (GIFT.dogs[1]||{}).media || [] };
+  const baked = { sp_valley:[], sp_sea:[], sp_fire:[], sp_sky:[], sp_forest:[], sp_snow:[], ticket: GIFT.ticket || [], travel: GIFT.travel || [], keep: GIFT.keep || [], mirror: GIFT.mirror || [], food: GIFT.food, dog0: (GIFT.dogs[0]||{}).media || [], dog1: (GIFT.dogs[1]||{}).media || [] };
   Object.keys(albums).forEach(k => {
     albums[k] = [...baked[k].map((f,i) => ({...f, id:`g-${k}-${i}`, local:false})),
                  ...local.filter(x => x.kind !== "letter" && (x.album || (x.kind === "food" ? "food" : "")) === k).map(x => withUrl({...x, local:true}))]
@@ -927,7 +927,7 @@ function renderBagMain(body){
 function renderGuide(body){
   setRibbon("사용법");
   const tips = [
-    ["화면 곳곳 누르기", "계곡·바다·모닥불·하늘·숲을 누르면 사진과 영상이 나와요. 식당은 음식 사진 모음이에요."],
+    ["화면 곳곳 누르기", "계곡·바다·모닥불·하늘·숲을 누르면 사진과 영상이 나와요. 아래 + 로 내 사진도 더할 수 있어요. 식당은 음식 사진 모음이에요."],
     ["공주와 강아지", "공주를 누르면 말을 걸고, 손거울을 누르면 손거울 앨범이 열려요. 강아지를 누르면 앨범 버튼이 나와요."],
     ["편지 묶음", "받은 편지와 보낸 편지를 나눠 모아요. + 로 글을 쓰거나 손편지 사진을 넣을 수 있어요."],
     ["사진첩·손거울·티켓·여행", "사진첩, 손거울, 티켓 모음, 여행 기념품에 간직하고 싶은 사진·영상을 + 로 계속 모을 수 있어요."],
@@ -1085,12 +1085,26 @@ const SPOT_VIEW = { snow:"220 540 92 69", dog0:"47 712 110 83", dog1:"61 538 118
 const SPOT_COLOR = { snow:"#8fb8ff", valley:"#4fb8d8", sea:"#2f9fd6", fire:"#ff8a4c", sky:"#8fb8ff", forest:"#5bb567" };
 function openSpot(key){
   const s = GIFT.spots[key]; if(!s) return;
-  openSheet(s.name, SPOT_COLOR[key], body => {
-    const box = mediaBox(s.media || [], key);
-    body.appendChild(box);
-    if(s.note) body.appendChild(el(`<p class="note">${esc(s.note)}</p>`));
-  });
+  openSheet(s.name, SPOT_COLOR[key], body => renderSpot(body, key));
 }
+const SPOT_KEYS = ["valley","sea","fire","sky","forest","snow"];
+function renderSpot(body, key){
+  const s = GIFT.spots[key], ak = "sp_" + key, mine = albums[ak] || [];
+  curAlbum = ak; stopMedia(body); body.innerHTML = "";
+  const all = [...(s.media || []), ...mine.map(f => ({ type:f.type, src:f.url || f.src }))];
+  body.appendChild(mediaBox(all, key));
+  if(s.note) body.appendChild(el(`<p class="note">${esc(s.note)}</p>`));
+  body.appendChild(el(`<p class="sub" style="margin:16px 0 4px">${mine.length ? `내가 넣은 사진·영상 ${mine.length}개` : "+ 를 눌러 여기에 내 사진이나 영상을 넣어보세요"}</p>`));
+  const g = el(`<div class="gal"></div>`);
+  mine.forEach((f, idx) => {
+    const b = el(`<button class="slot mine" aria-label="내가 넣은 ${idx+1}번째 크게 보기">${f.type==="video"?`<video src="${esc(f.url)}#t=0.1" muted playsinline preload="metadata"></video><span class="play">▶</span>`:`<img src="${esc(f.url)}" alt="" loading="lazy">`}</button>`);
+    b.onclick = () => openLb(ak, idx); g.appendChild(b);
+  });
+  const add = el(`<button class="slot add" aria-label="사진이나 영상 넣기"><span>+</span><span class="cap">넣기</span></button>`);
+  add.onclick = () => { curAlbum = ak; $("#filepick").click(); };
+  g.appendChild(add); body.appendChild(g);
+}
+const reRender = (body, k) => k.startsWith("sp_") ? renderSpot(body, k.slice(3)) : renderAlbum(body, k);
 function mediaBox(list, key){
   const wrap = el(`<div><div class="media"></div><div class="dots"></div></div>`);
   const m = wrap.querySelector(".media"), dots = wrap.querySelector(".dots");
@@ -1118,6 +1132,7 @@ function mediaBox(list, key){
 
 /* ---------- 앨범 (식당 + 강아지) ---------- */
 function albumMeta(k){
+  if(k.startsWith("sp_")){ const sp = GIFT.spots[k.slice(3)] || { name:"" }; return { title:sp.name, color:SPOT_COLOR[k.slice(3)], done:`${sp.name}에 넣었어요`, remove:"여기서 빼기", count:n => `${n}개`, empty:"" }; }
   if(k === "keep") return { title:"사진첩", color:"#5fb3e8", empty:"간직하고 싶은 사진이나 영상을 + 로 넣어두세요", count:n => `간직한 사진 ${n}개`, done:"사진첩에 넣었어요", remove:"사진첩에서 빼기", inBag:true };
   if(k === "ticket") return { title:"티켓 모음", color:"#ff7eb6", empty:"영화·공연·전시 티켓 사진을 + 로 모아두세요", count:n => `모은 티켓 ${n}장`, done:"티켓 모음에 넣었어요", remove:"티켓 모음에서 빼기", inBag:true };
   if(k === "travel") return { title:"여행 기념품", color:"#4fb89a", empty:"여행지에서 찍은 사진이나 기념품 사진을 + 로 모아두세요", count:n => `여행의 기록 ${n}개`, done:"여행 기념품에 넣었어요", remove:"여행 기념품에서 빼기", inBag:true };
@@ -1160,7 +1175,7 @@ $("#filepick").addEventListener("change", async e => {
     albums[k].push({...item, url:URL.createObjectURL(blob), local:true}); added++;
   }
   const body = sheet.querySelector(".panel-body");
-  if(body) renderAlbum(body, k);
+  if(body) reRender(body, k);
   if(added) toast(idb ? `${added}개를 ${albumMeta(k).done}` : "올렸지만 이 창을 닫으면 사라져요");
 });
 async function compress(file, max = 1400){
@@ -1190,7 +1205,7 @@ function renderLb(){
   if(p) p.onclick = () => { lbIdx = (lbIdx-1+list.length)%list.length; renderLb(); };
   if(n) n.onclick = () => { lbIdx = (lbIdx+1)%list.length; renderLb(); };
   const d = lb.querySelector(".del");
-  if(d) d.onclick = async () => { if(!await ask("이 사진을 뺄까요?")) return; await storeDel(f.id); list.splice(lbIdx,1); closeLb(); const body = sheet.querySelector(".panel-body"); if(body) renderAlbum(body, lbKey); };
+  if(d) d.onclick = async () => { if(!await ask("이 사진을 뺄까요?")) return; await storeDel(f.id); list.splice(lbIdx,1); closeLb(); const body = sheet.querySelector(".panel-body"); if(body) reRender(body, lbKey); };
 }
 
 /* 강아지 앨범 버튼 */
